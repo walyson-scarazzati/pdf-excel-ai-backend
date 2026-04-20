@@ -1,0 +1,96 @@
+name: Release Version
+
+on:
+  pull_request_target:
+    types:
+      - closed
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Determine bump type
+        id: bump
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          bump=patch
+          if [[ ",${LABELS}," == *",semver:major,"* ]]; then
+            bump=major
+          elif [[ ",${LABELS}," == *",semver:minor,"* ]]; then
+            bump=minor
+          fi
+          echo "value=${bump}" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate next version
+        id: version
+        run: |
+          current_version=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)
+          base_version=${current_version%-SNAPSHOT}
+          IFS='.' read -r major minor patch <<< "$base_version"
+
+          release_version="$base_version"
+
+          case "${{ steps.bump.outputs.value }}" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            *)
+              patch=$((patch + 1))
+              ;;
+          esac
+
+          next_snapshot_version="${major}.${minor}.${patch}-SNAPSHOT"
+          echo "current=${current_version}" >> "$GITHUB_OUTPUT"
+          echo "release=${release_version}" >> "$GITHUB_OUTPUT"
+          echo "next_snapshot=${next_snapshot_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Update pom.xml for release
+        run: mvn -B versions:set-property -Dproperty=revision -DnewVersion=${{ steps.version.outputs.release }} -DgenerateBackupPoms=false
+
+      - name: Commit and tag release
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.release }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pom.xml
+          git commit -m "chore(release): release ${RELEASE_VERSION}"
+          git tag "v${RELEASE_VERSION}"
+
+      - name: Update pom.xml for next snapshot
+        run: mvn -B versions:set-property -Dproperty=revision -DnewVersion=${{ steps.version.outputs.next_snapshot }} -DgenerateBackupPoms=false
+
+      - name: Commit next snapshot
+        env:
+          NEXT_SNAPSHOT_VERSION: ${{ steps.version.outputs.next_snapshot }}
+        run: |
+          git add pom.xml
+          git commit -m "chore(release): start ${NEXT_SNAPSHOT_VERSION}"
+
+      - name: Push release and next snapshot
+        run: git push origin main --follow-tags
