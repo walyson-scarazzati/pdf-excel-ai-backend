@@ -1,3 +1,6 @@
+CREATE SCHEMA IF NOT EXISTS public;
+SET search_path TO public;
+
 CREATE TABLE accounting_accounts (
     code VARCHAR(16) PRIMARY KEY,
     full_code VARCHAR(32) NOT NULL,
