@@ -28,7 +28,9 @@ public class BankStatementParserService {
             "(\\d{2}/\\d{2}/\\d{4})\\s+.*?([\\d.,]+)\\s*([CD]?)\\s*$"
     );
     private static final Pattern DATE_AT_START_PATTERN = Pattern.compile("^(\\d{2}/\\d{2})(?:/(\\d{4}))?\\b");
-    private static final Pattern MONEY_PATTERN = Pattern.compile("-?\\d{1,3}(?:\\.\\d{3})*,\\d{2}-?|-?\\d+,\\d{2}-?");
+    private static final String MONEY_NUMBER_REGEX = "-?\\d{1,3}(?:\\.\\d{3})*,\\d{2}-?|-?\\d+,\\d{2}-?|-?\\d{1,3}(?:,\\d{3})*\\.\\d{2}-?|-?\\d+\\.\\d{2}-?";
+    private static final Pattern MONEY_PATTERN = Pattern.compile(MONEY_NUMBER_REGEX);
+    private static final Pattern MONEY_WITH_DIRECTION_PATTERN = Pattern.compile("(" + MONEY_NUMBER_REGEX + ")\\s*([CcDd])\\s*[-_/]?");
     private static final Pattern COLUMN_ROW_PATTERN = Pattern.compile("^COL\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^|]*)\\|([^|]*)$");
     private static final Pattern HISTORY_CODE_PATTERN = Pattern.compile("\\b\\d{3,5}\\b");
     private static final Pattern LONG_REFERENCE_PATTERN = Pattern.compile("\\b\\d{6,}\\b");
@@ -182,16 +184,15 @@ public class BankStatementParserService {
             return columnRows;
         }
 
-        List<ExtractedRow> rows = new ArrayList<>();
         String statementMonthYear = inferStatementMonthYear(text);
-        for (String rawLine : text.split("\\R")) {
-            String line = normalizeBankLine(rawLine);
+        List<ExtractedRow> rows = new ArrayList<>();
+        for (String line : buildBancoDoBrasilBlocks(text)) {
             if (!looksLikeBancoDoBrasilTransaction(line, statementMonthYear)) {
                 continue;
             }
 
             String date = resolveDate(line, statementMonthYear);
-            String amount = extractLastAmount(line);
+            String amount = normalizeAmount(extractLastAmount(line));
             if (!StringUtils.hasText(date) || !StringUtils.hasText(amount)) {
                 continue;
             }
@@ -307,7 +308,9 @@ public class BankStatementParserService {
     private boolean looksLikeBancoDoBrasilTransaction(String line, String statementMonthYear) {
         return StringUtils.hasText(resolveDate(line, statementMonthYear))
                 && StringUtils.hasText(extractLastAmount(line))
-                && containsAny(normalize(line), "pix", "boleto", "transfer", "cobranca", "credito", "debito", "bb rende", "pagamento", "saque");
+                && !containsAny(normalize(line), "saldo anterior", "saldo ", "limite especial", "taxa limite", "custo efetivo", "valor total")
+                && (StringUtils.hasText(extractHistoryCode(line, resolveDate(line, statementMonthYear)))
+                || containsAny(normalize(line), "pix", "boleto", "transfer", "cobranca", "credito", "debito", "bb rende", "rende facil", "pagamento", "saque", "tarifa", "impostos"));
     }
 
     private boolean looksLikeSantanderTransaction(String line, String statementMonthYear) {
@@ -343,12 +346,38 @@ public class BankStatementParserService {
     }
 
     private String extractLastAmount(String line) {
+        Matcher directedMatcher = MONEY_WITH_DIRECTION_PATTERN.matcher(line);
+        String directedAmount = "";
+        while (directedMatcher.find()) {
+            String candidate = directedMatcher.group(1);
+            if (isLikelyMoney(candidate)) {
+                directedAmount = candidate;
+            }
+        }
+        if (StringUtils.hasText(directedAmount)) {
+            return directedAmount;
+        }
+
         Matcher matcher = MONEY_PATTERN.matcher(line);
         String amount = "";
         while (matcher.find()) {
-            amount = matcher.group();
+            String candidate = matcher.group();
+            if (isLikelyMoney(candidate)) {
+                amount = candidate;
+            }
         }
         return amount;
+    }
+
+    private boolean isLikelyMoney(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        String cleaned = value.replace("-", "").trim();
+        if (cleaned.equals("0,00") || cleaned.equals("0.00")) {
+            return false;
+        }
+        return cleaned.matches("\\d{1,3}(?:[.,]\\d{3})*[,.]\\d{2}|\\d+[,.]\\d{2}");
     }
 
     private String extractHistoryCode(String line, String date) {
@@ -376,6 +405,10 @@ public class BankStatementParserService {
     private String cleanDescription(String line, String date, String amount, String historyCode) {
         String cleaned = line.replaceFirst("^" + Pattern.quote(date) + "\\s*", "")
                 .replace(amount, " ");
+        String rawAmount = amount.replace(',', '.');
+        if (!rawAmount.equals(amount)) {
+            cleaned = cleaned.replace(rawAmount, " ");
+        }
         if (StringUtils.hasText(historyCode)) {
             cleaned = cleaned.replaceFirst("\\b" + Pattern.quote(historyCode) + "\\b", " ");
         }
@@ -399,6 +432,14 @@ public class BankStatementParserService {
     }
 
     private boolean isCreditLine(String line, String amount) {
+        String direction = extractDirectionForAmount(line, amount);
+        if (direction.equalsIgnoreCase("C")) {
+            return true;
+        }
+        if (direction.equalsIgnoreCase("D")) {
+            return false;
+        }
+
         String normalized = normalize(line);
         if (amount.endsWith("-") || amount.startsWith("-")) {
             return false;
@@ -415,11 +456,175 @@ public class BankStatementParserService {
         return false;
     }
 
+    private String extractDirectionForAmount(String line, String amount) {
+        if (!StringUtils.hasText(amount)) {
+            return "";
+        }
+        Matcher matcher = MONEY_WITH_DIRECTION_PATTERN.matcher(line);
+        String normalizedAmount = normalizeAmount(amount);
+        String direction = "";
+        while (matcher.find()) {
+            if (normalizeAmount(matcher.group(1)).equals(normalizedAmount)) {
+                direction = matcher.group(2);
+            }
+        }
+        return direction;
+    }
+
     private String normalizeBankLine(String line) {
         String normalized = line == null ? "" : line.trim();
-        normalized = normalized.replaceAll("^[^0-9]*(\\d{2})[tiI|l](\\d{2})[tiI|l](\\d{4})", "$1/$2/$3");
+        normalized = normalizeBancoDoBrasilDateTokens(normalized);
+        normalized = normalized.replaceAll("(?<!\\d)([0-3]\\d)\\s*[tTiI|lLjJ,/.-]\\s*([01]\\d)\\s*[tTiI|lLnNjJ,/.-]\\s*(20\\d{2})(?!\\d)", "$1/$2/$3");
+        normalized = normalized.replaceAll("(?<!\\d)([0-3]\\d)([01]\\d)(20\\d{2})(?!\\d)", "$1/$2/$3");
+        normalized = normalized.replaceAll("^[^0-9]*(\\d{2})[tTiI|lLjJ/](\\d{2})[tTiI|lLnNjJ/](\\d{4})", "$1/$2/$3");
+        normalized = normalized.replaceAll("^[^0-9]*(\\d{2})[tTiI|lLjJ/](\\d{2})\\b", "$1/$2");
         normalized = normalized.replaceAll("\\s{2,}", " ");
         return normalized;
+    }
+
+    private String normalizeBancoDoBrasilDateTokens(String line) {
+        Matcher matcher = Pattern.compile("\\S*(?:202\\d|20[oO0]\\d)\\S*").matcher(line);
+        StringBuilder builder = new StringBuilder();
+        while (matcher.find()) {
+            String normalizedDate = normalizeBancoDoBrasilDateToken(matcher.group());
+            matcher.appendReplacement(builder, StringUtils.hasText(normalizedDate)
+                    ? Matcher.quoteReplacement(normalizedDate)
+                    : Matcher.quoteReplacement(matcher.group()));
+        }
+        matcher.appendTail(builder);
+        return builder.toString();
+    }
+
+    private String normalizeBancoDoBrasilDateToken(String token) {
+        String canonical = token
+                .replace('O', '0')
+                .replace('o', '0')
+                .replace('@', '0')
+                .replace('Z', '2')
+                .replace('z', '2');
+        String digits = canonical.replaceAll("[^0-9]", "");
+        int yearIndex = digits.indexOf("202");
+        if (yearIndex < 3) {
+            return "";
+        }
+
+        String year = digits.substring(yearIndex, Math.min(yearIndex + 4, digits.length()));
+        if (year.length() != 4) {
+            return "";
+        }
+
+        String prefix = digits.substring(0, yearIndex);
+        if (prefix.length() < 3) {
+            return "";
+        }
+
+        String day = prefix.substring(0, Math.min(2, prefix.length()));
+        String month = inferMonthDigits(prefix);
+        if (!isValidDayMonth(day, month)) {
+            return "";
+        }
+        return day + "/" + month + "/" + year;
+    }
+
+    private String inferMonthDigits(String datePrefix) {
+        List<String> candidates = new ArrayList<>();
+        if (datePrefix.length() >= 4) {
+            candidates.add(datePrefix.substring(datePrefix.length() - 2));
+        }
+        if (datePrefix.length() >= 5) {
+            candidates.add(datePrefix.substring(datePrefix.length() - 3, datePrefix.length() - 1));
+        }
+        if (datePrefix.length() >= 4) {
+            candidates.add(datePrefix.substring(2, 4));
+        }
+        if (datePrefix.length() == 3) {
+            candidates.add("0" + datePrefix.substring(2));
+        }
+
+        for (String candidate : candidates) {
+            int month = parsePositiveInt(candidate);
+            if (month >= 1 && month <= 12) {
+                return String.format("%02d", month);
+            }
+        }
+        return "";
+    }
+
+    private boolean isValidDayMonth(String dayValue, String monthValue) {
+        int day = parsePositiveInt(dayValue);
+        int month = parsePositiveInt(monthValue);
+        return day >= 1 && day <= 31 && month >= 1 && month <= 12;
+    }
+
+    private int parsePositiveInt(String value) {
+        if (!StringUtils.hasText(value) || !value.matches("\\d+")) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            return -1;
+        }
+    }
+
+    private List<String> buildBancoDoBrasilBlocks(String text) {
+        List<String> blocks = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean currentStartedWithDate = false;
+
+        for (String rawLine : text.split("\\R")) {
+            String line = normalizeBankLine(rawLine);
+            if (!StringUtils.hasText(line)) {
+                continue;
+            }
+
+            for (String segment : splitBancoDoBrasilDateSegments(line)) {
+                boolean startsWithDate = DATE_AT_START_PATTERN.matcher(segment).find();
+                if (startsWithDate && currentStartedWithDate && current.length() > 0) {
+                    blocks.add(current.toString());
+                    current.setLength(0);
+                }
+
+                if (startsWithDate || currentStartedWithDate) {
+                    if (current.length() > 0) {
+                        current.append(' ');
+                    }
+                    current.append(segment);
+                    currentStartedWithDate = true;
+                }
+            }
+        }
+
+        if (currentStartedWithDate && current.length() > 0) {
+            blocks.add(current.toString());
+        }
+
+        return blocks;
+    }
+
+    private List<String> splitBancoDoBrasilDateSegments(String line) {
+        List<String> segments = new ArrayList<>();
+        Matcher matcher = Pattern.compile("\\b[0-3]\\d/[01]\\d(?:/20\\d{2})?\\b").matcher(line);
+        int start = -1;
+        while (matcher.find()) {
+            if (start >= 0 && matcher.start() > start) {
+                String segment = line.substring(start, matcher.start()).trim();
+                if (StringUtils.hasText(segment)) {
+                    segments.add(segment);
+                }
+            }
+            start = matcher.start();
+        }
+
+        if (start >= 0) {
+            String segment = line.substring(start).trim();
+            if (StringUtils.hasText(segment)) {
+                segments.add(segment);
+            }
+        } else {
+            segments.add(line);
+        }
+        return segments;
     }
 
     private String normalizeBankColumnDate(String value) {
@@ -440,6 +645,18 @@ public class BankStatementParserService {
         }
         if (normalized.matches("\\d+,\\d{2}[CD]")) {
             normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalizeAmount(normalized);
+    }
+
+    private String normalizeAmount(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        String normalized = value.replaceAll("[^0-9,.-]", "").trim();
+        if (!normalized.contains(",") && normalized.matches("-?\\d+(?:\\.\\d{3})*\\.\\d{2}-?|-?\\d+\\.\\d{2}-?")) {
+            int lastDot = normalized.lastIndexOf('.');
+            normalized = normalized.substring(0, lastDot).replace(".", "") + "," + normalized.substring(lastDot + 1);
         }
         return normalized;
     }
