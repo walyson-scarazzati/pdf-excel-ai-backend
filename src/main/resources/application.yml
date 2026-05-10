@@ -13,7 +13,7 @@ spring:
       max-file-size: 50MB
       max-request-size: 50MB
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/pdf_excel_ai}
+    url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:pdf_excel_ai}}
     username: ${DB_USERNAME:pdf_excel_ai}
     password: ${DB_PASSWORD:pdf_excel_ai}
     driver-class-name: org.postgresql.Driver

@@ -27,7 +27,7 @@ services:
       AI_MODEL: ${AI_MODEL:-openai/gpt-4.1-mini}
       AI_GITHUB_API_VERSION: ${AI_GITHUB_API_VERSION:-2026-03-10}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:4200}
-      DB_URL: ${DB_URL}
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres:5432/${DB_NAME:-pdf_excel_ai}}
       DB_USERNAME: ${DB_USERNAME:-pdf_excel_ai}
       DB_PASSWORD: ${DB_PASSWORD:-pdf_excel_ai}
     ports:

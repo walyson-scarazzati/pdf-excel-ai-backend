@@ -91,6 +91,16 @@ DB_USERNAME=pdf_excel_ai
 DB_PASSWORD=pdf_excel_ai
 ```
 
+Em deploys como Render usando Supabase, `DB_URL` precisa ser uma URL JDBC completa. Use o host do Supabase dentro deste formato:
+
+```dotenv
+DB_URL=jdbc:postgresql://db.<project-ref>.supabase.co:5432/postgres?sslmode=require
+DB_USERNAME=postgres
+DB_PASSWORD=<sua-senha>
+```
+
+Se `DB_URL` estiver apenas como `db.<project-ref>.supabase.co`, o driver PostgreSQL rejeita a conexão com o erro `claims to not accept jdbcUrl`.
+
 ## 📝 Formato CSV Aceito
 
 O sistema aceita arquivos CSV no formato:
@@ -162,7 +172,7 @@ O sistema suporta integração com IA para extração mais avançada (opcional):
 - `AI_API_URL`: URL da API de IA
 - `AI_API_KEY`: Chave de API
 - `AI_MODEL`: Modelo a ser utilizado
-- `DB_URL`: JDBC URL do Postgres
+- `DB_URL`: JDBC URL completa do Postgres, por exemplo `jdbc:postgresql://host:5432/database?sslmode=require`
 - `DB_USERNAME`: Usuário do Postgres
 - `DB_PASSWORD`: Senha do Postgres
 - `OCR_ENABLED`: Ativar OCR para PDFs escaneados
