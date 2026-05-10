@@ -2,7 +2,7 @@ package com.walyson.pdfexcelai.model;
 
 public enum BankProfile {
     UNKNOWN(OcrMode.AUTO),
-    BANCO_DO_BRASIL(OcrMode.ONLY),
+    BANCO_DO_BRASIL(OcrMode.AUTO),
     SANTANDER(OcrMode.FIRST);
 
     private final OcrMode defaultOcrMode;

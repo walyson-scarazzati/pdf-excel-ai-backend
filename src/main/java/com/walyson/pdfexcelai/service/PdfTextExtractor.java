@@ -181,9 +181,6 @@ public class PdfTextExtractor {
 
         int extractedScore = scoreStructuredText(extractedText);
         int ocrScore = scoreStructuredText(ocrText);
-        if (shouldUseOcr && ocrScore > 0) {
-            return ocrText;
-        }
         if (ocrScore > extractedScore) {
             return ocrText;
         }
