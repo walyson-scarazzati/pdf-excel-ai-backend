@@ -1,7 +1,7 @@
 CREATE SCHEMA IF NOT EXISTS public;
 SET search_path TO public;
 
-CREATE TABLE accounting_accounts (
+CREATE TABLE IF NOT EXISTS accounting_accounts (
     code VARCHAR(16) PRIMARY KEY,
     full_code VARCHAR(32) NOT NULL,
     description VARCHAR(255) NOT NULL,
@@ -10,13 +10,13 @@ CREATE TABLE accounting_accounts (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE accounting_history_codes (
+CREATE TABLE IF NOT EXISTS accounting_history_codes (
     code VARCHAR(16) PRIMARY KEY,
     description VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE accounting_classification_rules (
+CREATE TABLE IF NOT EXISTS accounting_classification_rules (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(120) NOT NULL,
     keywords TEXT NOT NULL DEFAULT '',
@@ -31,7 +31,7 @@ CREATE TABLE accounting_classification_rules (
         CHECK (direction IN ('ANY', 'CREDIT', 'DEBIT'))
 );
 
-CREATE INDEX idx_accounting_classification_rules_active_priority
+CREATE INDEX IF NOT EXISTS idx_accounting_classification_rules_active_priority
     ON accounting_classification_rules(active, priority);
 
 INSERT INTO accounting_accounts (code, full_code, description, account_group) VALUES
@@ -60,7 +60,12 @@ INSERT INTO accounting_accounts (code, full_code, description, account_group) VA
     ('1686', '4302020002', 'IMPOSTOS E TAXAS ESTADUAIS', 'DESPESAS TRIBUTARIAS'),
     ('1708', '4302020003', 'IMPOSTOS E TAXAS MUNICIPAIS', 'DESPESAS TRIBUTARIAS'),
     ('6815', '4302020015', 'TAXAS DE FUNCIONAMENTO', 'DESPESAS TRIBUTARIAS'),
-    ('9768', '4303010018', 'JUROS S/ EMPRESTIMOS E FINANCIAMENTOS', 'DESPESAS FINANCEIRAS');
+    ('9768', '4303010018', 'JUROS S/ EMPRESTIMOS E FINANCIAMENTOS', 'DESPESAS FINANCEIRAS')
+ON CONFLICT (code) DO UPDATE SET
+    full_code = EXCLUDED.full_code,
+    description = EXCLUDED.description,
+    account_group = EXCLUDED.account_group,
+    source = EXCLUDED.source;
 
 INSERT INTO accounting_history_codes (code, description) VALUES
     ('31', 'Transferência enviada / folha / salários'),
@@ -74,11 +79,14 @@ INSERT INTO accounting_history_codes (code, description) VALUES
     ('78', 'Cartão'),
     ('133', 'Financiamento / empréstimo'),
     ('142', 'Impostos e taxas'),
-    ('162', 'Seguros');
+    ('162', 'Seguros')
+ON CONFLICT (code) DO UPDATE SET
+    description = EXCLUDED.description;
 
 INSERT INTO accounting_classification_rules
     (name, keywords, direction, debit_account_code, credit_account_code, history_code, priority)
-VALUES
+SELECT name, keywords, direction, debit_account_code, credit_account_code, history_code, priority
+FROM (VALUES
     ('Resgate aplicação Banco do Brasil', 'resgate,resgat', 'ANY', '7560', '7579', '68', 10),
     ('Aplicação Banco do Brasil', 'rende facil,bb rende,aplicacao,aplicacoes', 'DEBIT', '7579', '7560', '67', 20),
     ('Tarifas bancárias', 'tarifa,tar.,cesta,pacote de servicos,despesas bancarias', 'DEBIT', '1880', '7560', '53', 30),
@@ -105,4 +113,10 @@ VALUES
     ('Recebimentos de clientes', 'recebido,credito em conta,transferencia recebida,deposito', 'CREDIT', '7560', '3239', '41', 240),
     ('Serviços online', 'aplicativos,online', 'DEBIT', '3298', '7560', '54', 250),
     ('Pagamento padrão', '', 'DEBIT', '3220', '7560', '54', 1000),
-    ('Recebimento padrão', '', 'CREDIT', '7560', '3239', '41', 1010);
+    ('Recebimento padrão', '', 'CREDIT', '7560', '3239', '41', 1010)
+) AS seed(name, keywords, direction, debit_account_code, credit_account_code, history_code, priority)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM accounting_classification_rules existing
+    WHERE existing.name = seed.name
+);
