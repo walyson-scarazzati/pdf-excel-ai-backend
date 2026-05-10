@@ -156,7 +156,7 @@ public class OcrService {
             return image;
         }
 
-        BufferedImage working = image;
+        BufferedImage working = resizeToPixelLimit(image);
         if (bankProfile == BankProfile.BANCO_DO_BRASIL) {
             working = upscale(working);
         }
@@ -195,12 +195,39 @@ public class OcrService {
             return image;
         }
 
+        long scaledPixels = (long) image.getWidth() * factor * image.getHeight() * factor;
+        if (scaledPixels > maxImagePixels()) {
+            return image;
+        }
+
         BufferedImage scaled = new BufferedImage(image.getWidth() * factor, image.getHeight() * factor, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = scaled.createGraphics();
         graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         graphics.drawImage(image, 0, 0, scaled.getWidth(), scaled.getHeight(), null);
         graphics.dispose();
         return scaled;
+    }
+
+    private BufferedImage resizeToPixelLimit(BufferedImage image) {
+        long pixels = (long) image.getWidth() * image.getHeight();
+        long maxPixels = maxImagePixels();
+        if (pixels <= maxPixels) {
+            return image;
+        }
+
+        double scale = Math.sqrt((double) maxPixels / pixels);
+        int targetWidth = Math.max(1, (int) Math.floor(image.getWidth() * scale));
+        int targetHeight = Math.max(1, (int) Math.floor(image.getHeight() * scale));
+        BufferedImage scaled = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = scaled.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        graphics.drawImage(image, 0, 0, targetWidth, targetHeight, null);
+        graphics.dispose();
+        return scaled;
+    }
+
+    private long maxImagePixels() {
+        return Math.max(1_000_000L, ocrProperties.maxImagePixels());
     }
 
     private BufferedImage removeNoise(BufferedImage image) {

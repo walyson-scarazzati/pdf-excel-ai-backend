@@ -23,8 +23,8 @@ import java.util.regex.Pattern;
 @Service
 public class PdfTextExtractor {
 
-    private static final int MAX_RENDERED_PAGES = 10;
-    private static final float IMAGE_DPI = 180f;
+    private static final int MAX_RENDERED_PAGES = 3;
+    private static final float IMAGE_DPI = 120f;
     private static final int PREVIEW_TEXT_LIMIT = 2000;
     private static final int MIN_TEXT_LENGTH_PER_PAGE = 24;
     private static final Pattern STRUCTURED_LINE_PATTERN = Pattern.compile(

@@ -11,6 +11,7 @@ public record OcrProperties(
         int pageSegmentationMode,
         int timeoutSeconds,
         int maxPages,
+        long maxImagePixels,
         boolean preprocessEnabled,
         double contrastFactor,
         int threshold,

@@ -64,11 +64,12 @@ app:
     language: ${OCR_LANGUAGE:por}
     page-segmentation-mode: ${OCR_PSM:4}
     timeout-seconds: ${OCR_TIMEOUT_SECONDS:25}
-    max-pages: ${OCR_MAX_PAGES:5}
+    max-pages: ${OCR_MAX_PAGES:2}
+    max-image-pixels: ${OCR_MAX_IMAGE_PIXELS:6000000}
     preprocess-enabled: ${OCR_PREPROCESS_ENABLED:true}
     contrast-factor: ${OCR_CONTRAST_FACTOR:1.35}
     threshold: ${OCR_THRESHOLD:168}
-    upscale-factor: ${OCR_UPSCALE_FACTOR:2}
+    upscale-factor: ${OCR_UPSCALE_FACTOR:1}
     deskew-enabled: ${OCR_DESKEW_ENABLED:true}
     max-deskew-angle: ${OCR_MAX_DESKEW_ANGLE:3.0}
     crop-top-ratio: ${OCR_CROP_TOP_RATIO:0.12}
@@ -83,3 +84,4 @@ logging:
     org.springframework: ${LOG_LEVEL_SPRING:INFO}
     org.apache.coyote.http11.Http11Processor: ${LOG_LEVEL_HTTP11:WARN}
     com.zaxxer.hikari: ${LOG_LEVEL_HIKARI:INFO}
+    java.lang.ProcessBuilder: ${LOG_LEVEL_PROCESS_BUILDER:INFO}
