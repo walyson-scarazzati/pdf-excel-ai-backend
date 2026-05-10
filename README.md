@@ -91,7 +91,15 @@ DB_USERNAME=pdf_excel_ai
 DB_PASSWORD=pdf_excel_ai
 ```
 
-Em deploys como Render usando Supabase, `DB_URL` precisa ser uma URL JDBC completa. Use o host do Supabase dentro deste formato:
+Em deploys como Render usando Supabase, `DB_URL` precisa ser uma URL JDBC completa. A tela do Supabase avisa que conexoes diretas usam IPv6 por padrao; como o Render pode ser IPv4-only, prefira o Session Pooler em `Connect > Pooler settings > Session pooler`.
+
+```dotenv
+DB_URL=jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+DB_USERNAME=postgres.<project-ref>
+DB_PASSWORD=<sua-senha>
+```
+
+Se voce ativar o IPv4 add-on no Supabase ou estiver em uma rede com IPv6, a conexao direta tambem funciona:
 
 ```dotenv
 DB_URL=jdbc:postgresql://db.<project-ref>.supabase.co:5432/postgres?sslmode=require
@@ -100,6 +108,7 @@ DB_PASSWORD=<sua-senha>
 ```
 
 Se `DB_URL` estiver apenas como `db.<project-ref>.supabase.co`, o driver PostgreSQL rejeita a conexão com o erro `claims to not accept jdbcUrl`.
+O backend tambem normaliza esse formato automaticamente para Supabase, mas manter a URL JDBC completa no Render evita ambiguidade.
 
 ## 📝 Formato CSV Aceito
 
