@@ -71,7 +71,7 @@ app:
     crop-bottom-ratio: ${OCR_CROP_BOTTOM_RATIO:0.03}
     crop-side-ratio: ${OCR_CROP_SIDE_RATIO:0.03}
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200,https://pdf-excel-ai-frontend.vercel.app}
 
 logging:
   level:
