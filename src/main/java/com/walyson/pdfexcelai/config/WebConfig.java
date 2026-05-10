@@ -1,5 +1,7 @@
 package com.walyson.pdfexcelai.config;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -9,6 +11,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @EnableConfigurationProperties({CorsProperties.class, AiProperties.class, OcrProperties.class})
 public class WebConfig implements WebMvcConfigurer {
 
+    private static final Set<String> DEFAULT_ALLOWED_ORIGINS = Set.of(
+            "http://localhost:4200",
+            "https://pdf-excel-ai-frontend.vercel.app"
+    );
+
     private final CorsProperties corsProperties;
 
     public WebConfig(CorsProperties corsProperties) {
@@ -17,8 +24,15 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        LinkedHashSet<String> allowedOrigins = new LinkedHashSet<>(DEFAULT_ALLOWED_ORIGINS);
+        if (corsProperties.allowedOrigins() != null) {
+            allowedOrigins.addAll(corsProperties.allowedOrigins());
+        }
+
         registry.addMapping("/**")
-                .allowedOrigins(corsProperties.allowedOrigins().toArray(String[]::new))
-                .allowedMethods("GET", "POST", "OPTIONS");
+                .allowedOrigins(allowedOrigins.toArray(String[]::new))
+                .allowedMethods("GET", "POST", "OPTIONS")
+                .allowedHeaders("*")
+                .maxAge(3600);
     }
 }
