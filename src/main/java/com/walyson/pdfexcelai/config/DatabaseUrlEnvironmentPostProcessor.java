@@ -16,12 +16,13 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        if (trimToNull(environment.getProperty("SPRING_DATASOURCE_URL")) != null) {
-            return;
+        String configuredUrl = trimToNull(environment.getProperty("SPRING_DATASOURCE_URL"));
+        if (configuredUrl == null) {
+            configuredUrl = environment.getProperty("DB_URL");
         }
 
         String normalizedUrl = normalizeDatabaseUrl(
-                environment.getProperty("DB_URL"),
+                configuredUrl,
                 environment.getProperty("DB_HOST"),
                 environment.getProperty("DB_PORT"),
                 environment.getProperty("DB_NAME"));
@@ -42,6 +43,11 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
             return null;
         }
 
+        String poolerHost = trimToNull(dbHost);
+        if (isPoolerHost(poolerHost) && isDirectSupabaseUrl(value)) {
+            return buildJdbcUrl(poolerHost, dbPort, dbName, true);
+        }
+
         if (value.startsWith("jdbc:")) {
             return value;
         }
@@ -59,6 +65,14 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
             host = value;
         }
 
+        if (value.contains("/") || value.contains("?")) {
+            return "jdbc:postgresql://" + value;
+        }
+
+        return buildJdbcUrl(host, dbPort, dbName, isSupabaseHost(host));
+    }
+
+    private static String buildJdbcUrl(String host, String dbPort, String dbName, boolean requireSsl) {
         String port = trimToNull(dbPort);
         if (port == null) {
             port = "5432";
@@ -66,15 +80,11 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
 
         String database = trimToNull(dbName);
         if (database == null) {
-            database = isSupabaseHost(host) ? "postgres" : "pdf_excel_ai";
-        }
-
-        if (value.contains("/") || value.contains("?")) {
-            return "jdbc:postgresql://" + value;
+            database = isSupabaseHost(host) || isPoolerHost(host) ? "postgres" : "pdf_excel_ai";
         }
 
         String url = "jdbc:postgresql://" + host + ":" + port + "/" + database;
-        if (isSupabaseHost(host)) {
+        if (requireSsl) {
             url += "?sslmode=require";
         }
         return url;
@@ -82,6 +92,15 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
 
     private static boolean isSupabaseHost(String host) {
         return host != null && host.endsWith(".supabase.co");
+    }
+
+    private static boolean isPoolerHost(String host) {
+        return host != null && host.endsWith(".pooler.supabase.com");
+    }
+
+    private static boolean isDirectSupabaseUrl(String value) {
+        return value.contains(".supabase.co")
+                && !value.contains(".pooler.supabase.com");
     }
 
     private static String trimToNull(String value) {

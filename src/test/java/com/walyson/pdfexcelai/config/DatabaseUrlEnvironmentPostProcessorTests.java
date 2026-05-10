@@ -43,4 +43,14 @@ class DatabaseUrlEnvironmentPostProcessorTests {
                 "app_db"))
                 .isEqualTo("jdbc:postgresql://db.internal:6543/app_db");
     }
+
+    @Test
+    void replacesDirectSupabaseJdbcUrlWithConfiguredPoolerHost() {
+        assertThat(DatabaseUrlEnvironmentPostProcessor.normalizeDatabaseUrl(
+                "jdbc:postgresql://db.hwtbulztousmqgllwmrh.supabase.co:5432/postgres?sslmode=require",
+                "aws-1-eu-central-1.pooler.supabase.com",
+                "5432",
+                "postgres"))
+                .isEqualTo("jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require");
+    }
 }
