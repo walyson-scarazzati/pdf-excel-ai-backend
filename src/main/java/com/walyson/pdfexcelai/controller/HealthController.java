@@ -2,6 +2,9 @@ package com.walyson.pdfexcelai.controller;
 
 import com.walyson.pdfexcelai.config.AiProperties;
 import com.walyson.pdfexcelai.service.OcrService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/health")
+@Tag(name = "Health", description = "Status da aplicacao e configuracao de OCR/IA")
 public class HealthController {
 
     private static final String PROVIDER_FIELD = "provider";
@@ -28,6 +32,9 @@ public class HealthController {
     }
 
     @GetMapping
+    @Operation(summary = "Check application health")
+    @ApiResponse(responseCode = "200", description = "Aplicacao pronta")
+    @ApiResponse(responseCode = "503", description = "Configuracao incompleta ou dependencia indisponivel")
     public ResponseEntity<Map<String, Object>> health() {
         boolean aiConfigured = isAiConfigured();
         boolean ocrEnabled = ocrService.isEnabled();

@@ -38,6 +38,14 @@ management:
         enabled: true
       show-details: always
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
 app:
   ai:
     provider: ${AI_PROVIDER:openai}
