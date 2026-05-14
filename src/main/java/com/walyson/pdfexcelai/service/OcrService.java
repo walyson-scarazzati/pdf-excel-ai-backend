@@ -27,7 +27,11 @@ import org.springframework.util.StringUtils;
 @Service
 public class OcrService {
 
+    private static final long AVAILABILITY_CACHE_TTL_MILLIS = TimeUnit.MINUTES.toMillis(5);
+
     private final OcrProperties ocrProperties;
+    private volatile Boolean cachedAvailability;
+    private volatile long cachedAvailabilityAt;
 
     public OcrService(OcrProperties ocrProperties) {
         this.ocrProperties = ocrProperties;
@@ -42,21 +46,31 @@ public class OcrService {
             return false;
         }
 
+        Boolean cached = cachedAvailability;
+        long now = System.currentTimeMillis();
+        if (cached != null && now - cachedAvailabilityAt < AVAILABILITY_CACHE_TTL_MILLIS) {
+            return cached;
+        }
+
         Process process = null;
+        boolean available = false;
         try {
             process = new ProcessBuilder(versionCommand()).redirectErrorStream(true).start();
             boolean completed = process.waitFor(Math.max(3, ocrProperties.timeoutSeconds()), TimeUnit.SECONDS);
             if (!completed) {
                 process.destroyForcibly();
-                return false;
+            } else {
+                available = process.exitValue() == 0;
             }
-            return process.exitValue() == 0;
         } catch (IOException ex) {
-            return false;
+            available = false;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return false;
+            available = false;
         }
+        cachedAvailability = available;
+        cachedAvailabilityAt = now;
+        return available;
     }
 
     public String commandName() {

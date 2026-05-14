@@ -41,7 +41,7 @@ public class DocumentProcessingService {
         
         // Processar PDF
         System.out.println("[DEBUG] Extraindo texto do PDF: " + filename);
-        PdfDocumentSnapshot snapshot = pdfTextExtractor.extract(file);
+        PdfDocumentSnapshot snapshot = pdfTextExtractor.extract(file, false);
         System.out.println("[DEBUG] Paginas extraidas: " + snapshot.pageCount());
         System.out.println("[DEBUG] Texto disponivel: " + snapshot.textAvailable());
         System.out.println("[DEBUG] Tamanho do texto normalizado: " + (snapshot.normalizedText() != null ? snapshot.normalizedText().length() : 0));

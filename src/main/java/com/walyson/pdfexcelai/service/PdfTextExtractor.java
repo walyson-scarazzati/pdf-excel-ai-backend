@@ -51,14 +51,18 @@ public class PdfTextExtractor {
     }
 
     public PdfDocumentSnapshot extract(MultipartFile file) throws IOException {
-        byte[] bytes = file.getBytes();
-        if (isImage(file)) {
-            return extractFromImage(bytes, file.getOriginalFilename());
-        }
-        return extractFromPdf(bytes, file.getOriginalFilename());
+        return extract(file, true);
     }
 
-    private PdfDocumentSnapshot extractFromPdf(byte[] bytes, String fileName) throws IOException {
+    public PdfDocumentSnapshot extract(MultipartFile file, boolean includePreviewImages) throws IOException {
+        byte[] bytes = file.getBytes();
+        if (isImage(file)) {
+            return extractFromImage(bytes, file.getOriginalFilename(), includePreviewImages);
+        }
+        return extractFromPdf(bytes, file.getOriginalFilename(), includePreviewImages);
+    }
+
+    private PdfDocumentSnapshot extractFromPdf(byte[] bytes, String fileName, boolean includePreviewImages) throws IOException {
         try (PDDocument document = Loader.loadPDF(bytes)) {
             String rawText = extractDocumentText(document);
             List<String> pageTexts = extractPageTexts(document);
@@ -69,7 +73,7 @@ public class PdfTextExtractor {
             boolean ocrUsed = false;
 
             PDFRenderer renderer = new PDFRenderer(document);
-            int previewPageLimit = Math.min(document.getNumberOfPages(), maxRenderedPages);
+            int previewPageLimit = includePreviewImages ? Math.min(document.getNumberOfPages(), maxRenderedPages) : 0;
             int ocrPageLimit = shouldUseOcr ? Math.min(document.getNumberOfPages(), ocrService.maxPages()) : 0;
             int renderLimit = Math.max(previewPageLimit, ocrPageLimit);
 
@@ -112,7 +116,7 @@ public class PdfTextExtractor {
         }
     }
 
-    private PdfDocumentSnapshot extractFromImage(byte[] bytes, String fileName) throws IOException {
+    private PdfDocumentSnapshot extractFromImage(byte[] bytes, String fileName, boolean includePreviewImages) throws IOException {
         BufferedImage image = ImageIO.read(new java.io.ByteArrayInputStream(bytes));
         if (image == null) {
             throw new IOException("Formato de imagem nao suportado para OCR");
@@ -121,7 +125,7 @@ public class PdfTextExtractor {
         BankProfile bankProfile = bankProfileResolver.resolve(fileName, "", List.of());
         OcrMode ocrMode = bankProfile.resolveOcrMode(ocrService.configuredMode());
         String ocrText = normalizeText(ocrService.extractText(image, bankProfile));
-        List<String> pageImages = List.of(toDataUrl(image));
+        List<String> pageImages = includePreviewImages ? List.of(toDataUrl(image)) : List.of();
         List<String> pageTexts = List.of(ocrText);
         String previewText = buildPreviewText(ocrText, "Imagem sem texto identificado. Ativa e instala o OCR local para processar este tipo de ficheiro.");
 
