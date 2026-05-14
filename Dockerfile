@@ -14,6 +14,7 @@ FROM eclipse-temurin:21-jre
 ARG APP_VERSION
 WORKDIR /app
 LABEL org.opencontainers.image.version=$APP_VERSION
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=85 -XX:InitialRAMPercentage=10 -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por \

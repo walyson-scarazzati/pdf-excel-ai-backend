@@ -1,5 +1,8 @@
 package com.walyson.pdfexcelai.config;
 
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -21,23 +24,38 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
             configuredUrl = environment.getProperty("DB_URL");
         }
 
-        String normalizedUrl = normalizeDatabaseUrl(
+        NormalizedDatabaseUrl normalized = normalizeDatabaseUrlInternal(
                 configuredUrl,
                 environment.getProperty("DB_HOST"),
                 environment.getProperty("DB_PORT"),
                 environment.getProperty("DB_NAME"));
 
-        if (normalizedUrl == null) {
+        if (normalized == null) {
             return;
         }
 
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("spring.datasource.url", normalizedUrl);
+        properties.put("spring.datasource.url", normalized.url());
+        if (normalized.username() != null) {
+            properties.put("spring.datasource.username", normalized.username());
+        }
+        if (normalized.password() != null) {
+            properties.put("spring.datasource.password", normalized.password());
+        }
         environment.getPropertySources()
                 .addFirst(new MapPropertySource(PROPERTY_SOURCE_NAME, properties));
     }
 
     static String normalizeDatabaseUrl(String dbUrl, String dbHost, String dbPort, String dbName) {
+        NormalizedDatabaseUrl normalized = normalizeDatabaseUrlWithCredentials(dbUrl, dbHost, dbPort, dbName);
+        return normalized == null ? null : normalized.url();
+    }
+
+    private static NormalizedDatabaseUrl normalizeDatabaseUrlInternal(String dbUrl, String dbHost, String dbPort, String dbName) {
+        return normalizeDatabaseUrlWithCredentials(dbUrl, dbHost, dbPort, dbName);
+    }
+
+    private static NormalizedDatabaseUrl normalizeDatabaseUrlWithCredentials(String dbUrl, String dbHost, String dbPort, String dbName) {
         String value = trimToNull(dbUrl);
         if (value == null) {
             return null;
@@ -45,19 +63,19 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
 
         String poolerHost = trimToNull(dbHost);
         if (isPoolerHost(poolerHost) && isDirectSupabaseUrl(value)) {
-            return buildJdbcUrl(poolerHost, dbPort, dbName, true);
+            return new NormalizedDatabaseUrl(buildJdbcUrl(poolerHost, dbPort, dbName, true), null, null);
         }
 
         if (value.startsWith("jdbc:")) {
-            return value;
+            return normalizeUriStyleUrl(value.substring("jdbc:".length()));
         }
 
         if (value.startsWith("postgresql://")) {
-            return "jdbc:" + value;
+            return normalizeUriStyleUrl(value);
         }
 
         if (value.startsWith("postgres://")) {
-            return "jdbc:postgresql://" + value.substring("postgres://".length());
+            return normalizeUriStyleUrl("postgresql://" + value.substring("postgres://".length()));
         }
 
         String host = trimToNull(dbHost);
@@ -66,10 +84,48 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
         }
 
         if (value.contains("/") || value.contains("?")) {
-            return "jdbc:postgresql://" + value;
+            return new NormalizedDatabaseUrl("jdbc:postgresql://" + value, null, null);
         }
 
-        return buildJdbcUrl(host, dbPort, dbName, isSupabaseHost(host));
+        return new NormalizedDatabaseUrl(buildJdbcUrl(host, dbPort, dbName, isSupabaseHost(host)), null, null);
+    }
+
+    private static NormalizedDatabaseUrl normalizeUriStyleUrl(String value) {
+        URI uri = URI.create(value);
+        if (!"postgresql".equals(uri.getScheme()) && !"postgres".equals(uri.getScheme())) {
+            return new NormalizedDatabaseUrl("jdbc:" + value, null, null);
+        }
+
+        StringBuilder jdbcUrl = new StringBuilder("jdbc:postgresql://");
+        jdbcUrl.append(uri.getHost());
+        if (uri.getPort() > -1) {
+            jdbcUrl.append(':').append(uri.getPort());
+        }
+        if (uri.getRawPath() != null) {
+            jdbcUrl.append(uri.getRawPath());
+        }
+        if (uri.getRawQuery() != null) {
+            jdbcUrl.append('?').append(uri.getRawQuery());
+        }
+
+        String username = null;
+        String password = null;
+        String userInfo = uri.getRawUserInfo();
+        if (userInfo != null) {
+            int separator = userInfo.indexOf(':');
+            if (separator >= 0) {
+                username = decode(userInfo.substring(0, separator));
+                password = decode(userInfo.substring(separator + 1));
+            } else {
+                username = decode(userInfo);
+            }
+        }
+
+        return new NormalizedDatabaseUrl(jdbcUrl.toString(), username, password);
+    }
+
+    private static String decode(String value) {
+        return URLDecoder.decode(value, StandardCharsets.UTF_8);
     }
 
     private static String buildJdbcUrl(String host, String dbPort, String dbName, boolean requireSsl) {
@@ -114,5 +170,8 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
     @Override
     public int getOrder() {
         return ORDER_AFTER_CONFIG_DATA;
+    }
+
+    private record NormalizedDatabaseUrl(String url, String username, String password) {
     }
 }

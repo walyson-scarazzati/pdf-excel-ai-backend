@@ -25,6 +25,26 @@ class DatabaseUrlEnvironmentPostProcessorTests {
     }
 
     @Test
+    void removesCredentialsFromRenderStylePostgresUri() {
+        assertThat(DatabaseUrlEnvironmentPostProcessor.normalizeDatabaseUrl(
+                "postgresql://app_user:secret@dpg-example-a.virginia-postgres.render.com/app_db",
+                null,
+                null,
+                null))
+                .isEqualTo("jdbc:postgresql://dpg-example-a.virginia-postgres.render.com/app_db");
+    }
+
+    @Test
+    void removesCredentialsFromJdbcUri() {
+        assertThat(DatabaseUrlEnvironmentPostProcessor.normalizeDatabaseUrl(
+                "jdbc:postgresql://app_user:secret@dpg-example-a.virginia-postgres.render.com/app_db",
+                null,
+                null,
+                null))
+                .isEqualTo("jdbc:postgresql://dpg-example-a.virginia-postgres.render.com/app_db");
+    }
+
+    @Test
     void expandsSupabaseHostOnlyUrl() {
         assertThat(DatabaseUrlEnvironmentPostProcessor.normalizeDatabaseUrl(
                 "db.hwtbulztousmqgllwmrh.supabase.co",

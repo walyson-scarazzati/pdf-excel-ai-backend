@@ -64,7 +64,10 @@ public class OcrService {
     }
 
     public int maxPages() {
-        return Math.max(1, ocrProperties.maxPages());
+        if (ocrProperties.maxPages() <= 0) {
+            return Integer.MAX_VALUE;
+        }
+        return ocrProperties.maxPages();
     }
 
     public OcrMode configuredMode() {

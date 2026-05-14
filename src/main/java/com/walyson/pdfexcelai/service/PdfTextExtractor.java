@@ -15,6 +15,7 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,8 +24,6 @@ import java.util.regex.Pattern;
 @Service
 public class PdfTextExtractor {
 
-    private static final int MAX_RENDERED_PAGES = 3;
-    private static final float IMAGE_DPI = 120f;
     private static final int PREVIEW_TEXT_LIMIT = 2000;
     private static final int MIN_TEXT_LENGTH_PER_PAGE = 24;
     private static final Pattern STRUCTURED_LINE_PATTERN = Pattern.compile(
@@ -36,10 +35,19 @@ public class PdfTextExtractor {
 
     private final OcrService ocrService;
     private final BankProfileResolver bankProfileResolver;
+    private final int maxRenderedPages;
+    private final float imageDpi;
 
-    public PdfTextExtractor(OcrService ocrService, BankProfileResolver bankProfileResolver) {
+    public PdfTextExtractor(
+            OcrService ocrService,
+            BankProfileResolver bankProfileResolver,
+            @Value("${app.pdf.preview-max-rendered-pages:1}") int maxRenderedPages,
+            @Value("${app.pdf.image-dpi:120}") float imageDpi
+    ) {
         this.ocrService = ocrService;
         this.bankProfileResolver = bankProfileResolver;
+        this.maxRenderedPages = Math.max(0, maxRenderedPages);
+        this.imageDpi = Math.max(72f, imageDpi);
     }
 
     public PdfDocumentSnapshot extract(MultipartFile file) throws IOException {
@@ -61,12 +69,12 @@ public class PdfTextExtractor {
             boolean ocrUsed = false;
 
             PDFRenderer renderer = new PDFRenderer(document);
-            int previewPageLimit = Math.min(document.getNumberOfPages(), MAX_RENDERED_PAGES);
+            int previewPageLimit = Math.min(document.getNumberOfPages(), maxRenderedPages);
             int ocrPageLimit = shouldUseOcr ? Math.min(document.getNumberOfPages(), ocrService.maxPages()) : 0;
             int renderLimit = Math.max(previewPageLimit, ocrPageLimit);
 
             for (int pageIndex = 0; pageIndex < renderLimit; pageIndex++) {
-                BufferedImage image = renderer.renderImageWithDPI(pageIndex, IMAGE_DPI);
+                BufferedImage image = renderer.renderImageWithDPI(pageIndex, imageDpi);
                 if (pageIndex < previewPageLimit) {
                     pageImages.add(toDataUrl(image));
                 }

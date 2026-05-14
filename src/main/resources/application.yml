@@ -10,8 +10,8 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 50MB
-      max-request-size: 50MB
+      max-file-size: ${APP_MAX_FILE_SIZE:200MB}
+      max-request-size: ${APP_MAX_REQUEST_SIZE:200MB}
   datasource:
     url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:pdf_excel_ai}}
     username: ${DB_USERNAME:pdf_excel_ai}
@@ -30,6 +30,14 @@ spring:
 
 server:
   port: 8081
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/xml,text/plain,text/css,text/javascript,application/javascript
+    min-response-size: 2KB
+  tomcat:
+    threads:
+      max: ${SERVER_TOMCAT_THREADS_MAX:20}
+      min-spare: ${SERVER_TOMCAT_THREADS_MIN_SPARE:2}
 
 management:
   endpoints:
@@ -51,6 +59,9 @@ springdoc:
     tags-sorter: alpha
 
 app:
+  pdf:
+    preview-max-rendered-pages: ${PDF_PREVIEW_MAX_RENDERED_PAGES:1}
+    image-dpi: ${PDF_IMAGE_DPI:120}
   ai:
     provider: ${AI_PROVIDER:openai}
     api-url: ${AI_API_URL:https://api.openai.com/v1/chat/completions}
