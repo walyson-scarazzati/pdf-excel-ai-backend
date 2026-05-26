@@ -63,6 +63,7 @@ jobs:
         run: |
           gcloud builds submit \
             --project "${GCP_PROJECT_ID}" \
+            --suppress-logs \
             --tag "${{ steps.image.outputs.uri }}" \
             "$GITHUB_WORKSPACE"
 
