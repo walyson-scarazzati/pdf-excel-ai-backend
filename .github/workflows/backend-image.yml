@@ -1,59 +1,78 @@
-name: Publish Backend Image
+name: Build Backend Image
 
 on:
   workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
+  id-token: write
   contents: read
-  packages: write
+
+concurrency:
+  group: build-image-main
+  cancel-in-progress: true
 
 jobs:
-  docker:
+  build:
     runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+      GCP_ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY || 'pdf-excel-ai' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          distribution: temurin
+          java-version: '21'
+          cache: maven
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/pdf-excel-ai-backend
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=sha
+      - name: Run tests
+        run: mvn -B test
 
-      - name: Resolve image version
-        id: version
+      - name: Validate required configuration
         run: |
-          image_version="${GITHUB_SHA}"
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            image_version="${GITHUB_REF_NAME#v}"
-          fi
-          echo "value=${image_version}" >> "$GITHUB_OUTPUT"
+          test -n "$GCP_PROJECT_ID" || (echo "Missing repo variable GCP_PROJECT_ID" && exit 1)
+          test -n "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}" || (echo "Missing secret GCP_WORKLOAD_IDENTITY_PROVIDER" && exit 1)
+          test -n "${{ secrets.GCP_SERVICE_ACCOUNT }}" || (echo "Missing secret GCP_SERVICE_ACCOUNT" && exit 1)
 
-      - name: Build and push backend image
-        uses: docker/build-push-action@v6
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          context: .
-          file: ./Dockerfile
-          build-args: |
-            APP_VERSION=${{ steps.version.outputs.value }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Resolve image URI
+        id: image
+        run: |
+          echo "uri=${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}/backend:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish backend image
+        run: |
+          gcloud builds submit \
+            --project "${GCP_PROJECT_ID}" \
+            --tag "${{ steps.image.outputs.uri }}" \
+            "$GITHUB_WORKSPACE"
+
+      - name: Export image metadata
+        run: |
+          mkdir -p .github-artifacts
+          echo "${{ steps.image.outputs.uri }}" > .github-artifacts/image_uri.txt
+
+      - name: Upload image metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image-metadata
+          path: .github-artifacts/image_uri.txt

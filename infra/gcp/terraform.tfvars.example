@@ -1,0 +1,52 @@
+project_id             = "SEU_PROJECT_ID"
+region                 = "us-central1"
+service_name           = "pdf-excel-ai-backend"
+artifact_repository_id = "pdf-excel-ai"
+
+# Atualize com a imagem publicada no Artifact Registry
+container_image = "us-central1-docker.pkg.dev/SEU_PROJECT_ID/pdf-excel-ai/backend:latest"
+
+# Para free tier/creditos, mantenha minimo em 0
+min_instances = 0
+max_instances = 2
+cpu           = "1"
+memory        = "1Gi"
+
+allow_unauthenticated = true
+
+plain_env = {
+  SPRING_PROFILES_ACTIVE   = "prod"
+  APP_CORS_ALLOWED_ORIGINS = "https://seu-frontend.vercel.app"
+  AI_PROVIDER              = "github-models"
+  AI_API_URL               = "https://models.github.ai/inference/chat/completions"
+  AI_MODEL                 = "openai/gpt-4.1-mini"
+  AI_GITHUB_API_VERSION    = "2026-03-10"
+
+  OCR_ENABLED            = "true"
+  OCR_COMMAND            = "tesseract"
+  OCR_MODE               = "auto"
+  OCR_LANGUAGE           = "por"
+  OCR_PSM                = "4"
+  OCR_TIMEOUT_SECONDS    = "25"
+  OCR_MAX_PAGES          = "2"
+  OCR_PREPROCESS_ENABLED = "true"
+  OCR_CONTRAST_FACTOR    = "1.35"
+  OCR_THRESHOLD          = "168"
+  OCR_UPSCALE_FACTOR     = "1"
+}
+
+# Segredos (criados pelo Terraform). Valores reais devem ficar em terraform.tfvars privado.
+secret_env = {
+  DB_URL      = "db-url"
+  DB_USERNAME = "db-username"
+  DB_PASSWORD = "db-password"
+  AI_API_KEY  = "ai-api-key"
+}
+
+# Nao versionar esse bloco com valores reais.
+secret_values = {
+  DB_URL      = "jdbc:postgresql://SEU_BANCO_HOST:5432/postgres?sslmode=require"
+  DB_USERNAME = "SEU_USUARIO"
+  DB_PASSWORD = "SUA_SENHA"
+  AI_API_KEY  = "SEU_TOKEN_GITHUB_MODELS"
+}

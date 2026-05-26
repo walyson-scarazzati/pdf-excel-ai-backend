@@ -207,6 +207,28 @@ Upload de documento para geração de arquivo Excel.
 
 **Response**: Arquivo Excel (.xlsx) para download
 
+## ☁️ Deploy no Google Cloud (Terraform)
+
+Foi adicionada uma stack Terraform em `infra/gcp` para provisionar:
+
+- Cloud Run
+- Artifact Registry
+- Secret Manager
+- Service Account com permissões mínimas
+
+Passos rápidos:
+
+```bash
+cd infra/gcp
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform apply
+```
+
+Depois, publique a imagem Docker no Artifact Registry e atualize `container_image` no `terraform.tfvars`.
+
+Guia completo: `infra/gcp/README.md`.
+
 ## 🛠️ Configuração (Opcional)
 
 O sistema suporta integração com IA para extração mais avançada (opcional):
