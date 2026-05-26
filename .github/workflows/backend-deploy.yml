@@ -181,5 +181,7 @@ jobs:
           terraform import 'google_project_service.enabled["secretmanager.googleapis.com"]' "${GCP_PROJECT_ID}/secretmanager.googleapis.com" || true
           terraform import 'google_project_service.enabled["cloudbuild.googleapis.com"]' "${GCP_PROJECT_ID}/cloudbuild.googleapis.com" || true
           terraform import 'google_project_service.enabled["iam.googleapis.com"]' "${GCP_PROJECT_ID}/iam.googleapis.com" || true
+          terraform import 'google_project_iam_member.run_secret_access' "${GCP_PROJECT_ID}/roles/secretmanager.secretAccessor/serviceAccount:${service_account_email}" || true
+          terraform import 'google_cloud_run_v2_service_iam_member.public_invoker[0]' "projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${GCP_SERVICE_NAME}/roles/run.invoker/allUsers" || true
 
           terraform apply -input=false -auto-approve
