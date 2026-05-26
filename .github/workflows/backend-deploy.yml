@@ -2,6 +2,11 @@ name: Deploy Backend to GCP (Production)
 
 on:
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy when running manually"
+        required: false
+        default: "latest"
   workflow_run:
     workflows:
       - Build Backend Image
@@ -51,10 +56,19 @@ jobs:
       - name: Set deploy commit SHA
         id: commit
         run: |
-          sha="${GITHUB_SHA}"
+          sha="latest"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            input_tag="${{ github.event.inputs.image_tag }}"
+            if [ -n "$input_tag" ]; then
+              sha="$input_tag"
+            fi
+          fi
+
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             sha="${{ github.event.workflow_run.head_sha }}"
           fi
+
           echo "value=${sha}" >> "$GITHUB_OUTPUT"
 
       - name: Validate required configuration
