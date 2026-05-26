@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || secrets.GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
       GCP_ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY || 'pdf-excel-ai' }}
 
@@ -38,7 +38,7 @@ jobs:
 
       - name: Validate required configuration
         run: |
-          test -n "$GCP_PROJECT_ID" || (echo "Missing repo variable GCP_PROJECT_ID" && exit 1)
+          test -n "$GCP_PROJECT_ID" || (echo "Missing GCP project id. Set repository variable GCP_PROJECT_ID (preferred) or secret GCP_PROJECT_ID." && exit 1)
           test -n "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}" || (echo "Missing secret GCP_WORKLOAD_IDENTITY_PROVIDER" && exit 1)
           test -n "${{ secrets.GCP_SERVICE_ACCOUNT }}" || (echo "Missing secret GCP_SERVICE_ACCOUNT" && exit 1)
 
