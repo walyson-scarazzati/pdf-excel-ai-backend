@@ -164,4 +164,22 @@ jobs:
         working-directory: infra/gcp
         run: |
           terraform init -input=false
+
+          # CI runners start with empty local state; import existing resources to avoid recreate failures.
+          service_account_id="$(echo "$GCP_SERVICE_NAME" | tr '_' '-' | cut -c1-28)"
+          service_account_email="${service_account_id}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+
+          terraform import 'google_artifact_registry_repository.docker' "projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/repositories/${GCP_ARTIFACT_REPOSITORY}" || true
+          terraform import 'google_service_account.run' "projects/${GCP_PROJECT_ID}/serviceAccounts/${service_account_email}" || true
+          terraform import 'google_secret_manager_secret.env["DB_URL"]' "projects/${GCP_PROJECT_ID}/secrets/db-url" || true
+          terraform import 'google_secret_manager_secret.env["DB_USERNAME"]' "projects/${GCP_PROJECT_ID}/secrets/db-username" || true
+          terraform import 'google_secret_manager_secret.env["DB_PASSWORD"]' "projects/${GCP_PROJECT_ID}/secrets/db-password" || true
+          terraform import 'google_secret_manager_secret.env["AI_API_KEY"]' "projects/${GCP_PROJECT_ID}/secrets/ai-api-key" || true
+          terraform import 'google_cloud_run_v2_service.app' "projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${GCP_SERVICE_NAME}" || true
+          terraform import 'google_project_service.enabled["run.googleapis.com"]' "${GCP_PROJECT_ID}/run.googleapis.com" || true
+          terraform import 'google_project_service.enabled["artifactregistry.googleapis.com"]' "${GCP_PROJECT_ID}/artifactregistry.googleapis.com" || true
+          terraform import 'google_project_service.enabled["secretmanager.googleapis.com"]' "${GCP_PROJECT_ID}/secretmanager.googleapis.com" || true
+          terraform import 'google_project_service.enabled["cloudbuild.googleapis.com"]' "${GCP_PROJECT_ID}/cloudbuild.googleapis.com" || true
+          terraform import 'google_project_service.enabled["iam.googleapis.com"]' "${GCP_PROJECT_ID}/iam.googleapis.com" || true
+
           terraform apply -input=false -auto-approve
