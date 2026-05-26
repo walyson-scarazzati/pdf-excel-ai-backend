@@ -6,4 +6,8 @@ import java.util.List;
 public interface AccountingClassificationRepository {
 
     List<AccountingClassificationRule> findActiveRules();
+
+    default List<String> findKnownAccountCodes() {
+        return List.of();
+    }
 }

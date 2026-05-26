@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -29,34 +31,44 @@ public class AccountingClassificationService {
         }
 
         List<AccountingClassificationRule> rules = repository.findActiveRules();
+        Set<String> knownCodes = repository.findKnownAccountCodes().stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .collect(Collectors.toSet());
         List<ExtractedRow> classifiedRows = new ArrayList<>(rows.size());
         for (ExtractedRow row : rows) {
-            classifiedRows.add(classify(row, rules));
+            classifiedRows.add(classify(row, rules, knownCodes));
         }
         return classifiedRows;
     }
 
     public ExtractedRow classify(ExtractedRow row) {
-        return classify(row, repository.findActiveRules());
+        Set<String> knownCodes = repository.findKnownAccountCodes().stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .collect(Collectors.toSet());
+        return classify(row, repository.findActiveRules(), knownCodes);
     }
 
-    private ExtractedRow classify(ExtractedRow row, List<AccountingClassificationRule> rules) {
+    private ExtractedRow classify(ExtractedRow row, List<AccountingClassificationRule> rules, Set<String> knownCodes) {
         if (row == null) {
             return new ExtractedRow("", "", "", "", "", "");
         }
         if (alreadyHasAccountCodes(row)) {
-            return normalizeValue(row);
+            return normalizeValue(row, knownCodes);
         }
 
         String context = normalize(row.complement() + " " + row.historyCode());
         String direction = inferDirection(row, context);
         AccountingClassificationRule rule = findRule(rules, context, direction);
+        String normalizedDebit = rule == null ? "" : normalizeAccountCode(rule.debitAccountCode(), knownCodes);
+        String normalizedCredit = rule == null ? "" : normalizeAccountCode(rule.creditAccountCode(), knownCodes);
 
         return new ExtractedRow(
                 clean(row.date()),
                 normalizeCurrency(row.value()),
-                rule == null ? "" : rule.debitAccountCode(),
-                rule == null ? "" : rule.creditAccountCode(),
+            normalizedDebit,
+            normalizedCredit,
                 rule == null ? clean(row.historyCode()) : rule.historyCode(),
                 clean(row.complement()));
     }
@@ -117,14 +129,49 @@ public class AccountingClassificationService {
         return StringUtils.hasText(value) && value.matches(".*\\d+[,.]\\d{2}.*");
     }
 
-    private ExtractedRow normalizeValue(ExtractedRow row) {
+    private ExtractedRow normalizeValue(ExtractedRow row, Set<String> knownCodes) {
         return new ExtractedRow(
                 clean(row.date()),
                 normalizeCurrency(row.value()),
-                clean(row.debit()),
-                clean(row.credit()),
+                normalizeAccountCode(row.debit(), knownCodes),
+                normalizeAccountCode(row.credit(), knownCodes),
                 clean(row.historyCode()),
                 clean(row.complement()));
+    }
+
+    private String normalizeAccountCode(String code, Set<String> knownCodes) {
+        String cleaned = clean(code).replaceAll("\\D", "");
+        if (!StringUtils.hasText(cleaned)) {
+            return "";
+        }
+        if (knownCodes.isEmpty()) {
+            return cleaned;
+        }
+        if (knownCodes.contains(cleaned)) {
+            return cleaned;
+        }
+
+        List<String> prefixedCandidates = knownCodes.stream()
+                .filter(existing -> existing.startsWith(cleaned))
+                .sorted((left, right) -> {
+                    int byLength = Integer.compare(left.length(), right.length());
+                    return byLength != 0 ? byLength : left.compareTo(right);
+                })
+                .toList();
+
+        if (prefixedCandidates.size() == 1) {
+            return prefixedCandidates.get(0);
+        }
+
+        List<String> suffixCandidates = knownCodes.stream()
+            .filter(cleaned::startsWith)
+                .sorted((left, right) -> Integer.compare(right.length(), left.length()))
+                .toList();
+        if (!suffixCandidates.isEmpty()) {
+            return suffixCandidates.get(0);
+        }
+
+        return cleaned;
     }
 
     private String inferDirection(ExtractedRow row, String context) {

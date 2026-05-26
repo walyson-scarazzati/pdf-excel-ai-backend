@@ -2,5 +2,10 @@ target/
 .git/
 .github/
 .vscode/
+.env
+.env.*
+!.env.example
+!.env.local.example
+!.env.cloud.example
 .DS_Store
 *.log

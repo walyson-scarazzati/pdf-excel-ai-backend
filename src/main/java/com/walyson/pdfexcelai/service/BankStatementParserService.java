@@ -1,7 +1,6 @@
 package com.walyson.pdfexcelai.service;
 
 import com.walyson.pdfexcelai.model.ExtractedRow;
-import com.walyson.pdfexcelai.model.BankProfile;
 import com.walyson.pdfexcelai.model.PdfDocumentSnapshot;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -9,6 +8,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.text.Normalizer;
@@ -16,17 +16,9 @@ import java.text.Normalizer;
 @Service
 public class BankStatementParserService {
 
-    // Patterns para extrair linhas do extrato
-    // Formato: DD/MM/YYYY;R$ VALUE;DEBIT;CREDIT;CODE;COMPLEMENT
-    private static final Pattern CSV_LINE_PATTERN = Pattern.compile(
-            "^(\\d{2}/\\d{2}/\\d{4})\\s*;\\s*([^;]*)\\s*;\\s*([^;]*)\\s*;\\s*([^;]*)\\s*;\\s*([^;]*)\\s*;\\s*(.*)$"
-    );
+        // Patterns para extrair linhas do extrato
+        // Formato: DD/MM/YYYY;R$ VALUE;DEBIT;CREDIT;CODE;COMPLEMENT
 
-    // Pattern para extrair dados de linha do PDF (formato do Banco do Brasil)
-    // Exemplo: 01/09/2025    0000    14134    612 Recebimento Fornecedor    150.003    1.200,00 C
-    private static final Pattern PDF_LINE_PATTERN = Pattern.compile(
-            "(\\d{2}/\\d{2}/\\d{4})\\s+.*?([\\d.,]+)\\s*([CD]?)\\s*$"
-    );
     private static final Pattern DATE_AT_START_PATTERN = Pattern.compile("^(\\d{2}/\\d{2})(?:/(\\d{4}))?\\b");
     private static final String MONEY_NUMBER_REGEX = "-?\\d{1,3}(?:\\.\\d{3})*,\\d{2}-?|-?\\d+,\\d{2}-?|-?\\d{1,3}(?:,\\d{3})*\\.\\d{2}-?|-?\\d+\\.\\d{2}-?";
     private static final Pattern MONEY_PATTERN = Pattern.compile(MONEY_NUMBER_REGEX);
@@ -77,17 +69,23 @@ public class BankStatementParserService {
                 }
             }
 
-            Matcher matcher = CSV_LINE_PATTERN.matcher(line);
-            if (matcher.matches()) {
-                String date = matcher.group(1).trim();
-                String value = matcher.group(2).trim();
-                String debit = matcher.group(3).trim();
-                String credit = matcher.group(4).trim();
-                String historyCode = matcher.group(5).trim();
-                String complement = matcher.group(6).trim();
-
-                rows.add(new ExtractedRow(date, value, debit, credit, historyCode, complement));
+            String[] columns = line.split(";", 6);
+            if (columns.length < 2) {
+                continue;
             }
+
+            String date = sanitizeDate(column(columns, 0));
+            if (!date.matches("\\d{2}/\\d{2}/\\d{4}")) {
+                continue;
+            }
+
+            String value = sanitizeCurrency(column(columns, 1));
+            String debit = sanitizeAccountCode(column(columns, 2));
+            String credit = sanitizeAccountCode(column(columns, 3));
+            String historyCode = sanitizeHistoryCode(column(columns, 4));
+            String complement = clean(column(columns, 5));
+
+            rows.add(new ExtractedRow(date, value, debit, credit, historyCode, complement));
         }
 
         return rows;
@@ -303,6 +301,49 @@ public class BankStatementParserService {
             return "";
         }
         return "R$ " + cleaned;
+    }
+
+    private String sanitizeDate(String value) {
+        String trimmed = clean(value);
+        if (trimmed.matches("\\d{2}/\\d{2}/\\d{2}")) {
+            return trimmed.substring(0, 6) + "20" + trimmed.substring(6);
+        }
+        return trimmed;
+    }
+
+    private String sanitizeCurrency(String value) {
+        String normalized = normalizeAmount(clean(value));
+        if (!StringUtils.hasText(normalized)) {
+            return "";
+        }
+        if (normalized.matches("\\d+,\\d{2}")) {
+            return "R$ " + normalized;
+        }
+        return normalized;
+    }
+
+    private String sanitizeAccountCode(String value) {
+        String digits = clean(value).replaceAll("[^0-9]", "");
+        if (!StringUtils.hasText(digits)) {
+            return "";
+        }
+        return digits;
+    }
+
+    private String sanitizeHistoryCode(String value) {
+        String digits = clean(value).replaceAll("[^0-9]", "");
+        return StringUtils.hasText(digits) ? digits : "";
+    }
+
+    private String column(String[] columns, int index) {
+        if (index >= columns.length) {
+            return "";
+        }
+        return Objects.requireNonNullElse(columns[index], "");
+    }
+
+    private String clean(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private boolean looksLikeBancoDoBrasilTransaction(String line, String statementMonthYear) {

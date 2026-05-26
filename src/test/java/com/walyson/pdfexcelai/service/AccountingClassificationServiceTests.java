@@ -9,12 +9,22 @@ import org.junit.jupiter.api.Test;
 
 class AccountingClassificationServiceTests {
 
-    private final AccountingClassificationService service = new AccountingClassificationService(() -> List.of(
-            new AccountingClassificationRule("Tarifas bancárias", "tarifa,tar.", "DEBIT", "1880", "7560", "53", 30),
-            new AccountingClassificationRule("PIX recebido", "pix recebido,pix - recebido", "CREDIT", "7560", "3239", "55", 230),
-            new AccountingClassificationRule("Pagamento padrão", "", "DEBIT", "3220", "7560", "54", 1000),
-            new AccountingClassificationRule("Recebimento padrão", "", "CREDIT", "7560", "3239", "41", 1010)
-    ));
+    private final AccountingClassificationService service = new AccountingClassificationService(new AccountingClassificationRepository() {
+        @Override
+        public List<AccountingClassificationRule> findActiveRules() {
+            return List.of(
+                    new AccountingClassificationRule("Tarifas bancárias", "tarifa,tar.", "DEBIT", "1880", "7560", "53", 30),
+                    new AccountingClassificationRule("PIX recebido", "pix recebido,pix - recebido", "CREDIT", "7560", "3239", "55", 230),
+                    new AccountingClassificationRule("Pagamento padrão", "", "DEBIT", "3220", "7560", "54", 1000),
+                    new AccountingClassificationRule("Recebimento padrão", "", "CREDIT", "7560", "3239", "41", 1010)
+            );
+        }
+
+        @Override
+        public List<String> findKnownAccountCodes() {
+            return List.of("7560", "3239", "1880", "3220", "1830", "4340");
+        }
+    });
 
     @Test
     void mapsPixReceivedToBankAndCustomerAccounts() {
@@ -84,5 +94,22 @@ class AccountingClassificationServiceTests {
         assertEquals("1880", rows.get(0).debit());
         assertEquals("7560", rows.get(0).credit());
         assertEquals("53", rows.get(0).historyCode());
+    }
+
+    @Test
+    void normalizesKnownTruncatedAccountCodeWhenRowAlreadyHasCodes() {
+        ExtractedRow row = new ExtractedRow(
+                "06/10/2025",
+                "R$ 1.506,35",
+                "434",
+                "7560",
+                "31",
+                "ELIANA PASCHOTTO"
+        );
+
+        ExtractedRow classified = service.classify(row);
+
+        assertEquals("4340", classified.debit());
+        assertEquals("7560", classified.credit());
     }
 }

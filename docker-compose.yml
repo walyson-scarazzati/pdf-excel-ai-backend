@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-pdf_excel_ai}
       POSTGRES_USER: ${DB_USERNAME:-pdf_excel_ai}
@@ -20,9 +21,9 @@ services:
   backend:
     build:
       context: .
-    env_file:
-      - .env
+    restart: unless-stopped
     environment:
+      PORT: ${PORT:-8081}
       AI_PROVIDER: ${AI_PROVIDER:-github-models}
       AI_API_URL: ${AI_API_URL:-https://models.github.ai/inference/chat/completions}
       AI_API_KEY: ${AI_API_KEY:-}
@@ -33,7 +34,7 @@ services:
       DB_USERNAME: ${DB_USERNAME:-pdf_excel_ai}
       DB_PASSWORD: ${DB_PASSWORD:-pdf_excel_ai}
     ports:
-      - "8081:8081"
+      - "${HOST_PORT:-8081}:${PORT:-8081}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,6 +44,8 @@ services:
   frontend:
     build:
       context: ../pdf-excel-ai-frontend
+    profiles:
+      - frontend
     environment:
       API_BASE_URL: ${API_BASE_URL:-http://localhost:8081/api}
     ports:

@@ -31,4 +31,13 @@ public class JdbcAccountingClassificationRepository implements AccountingClassif
                         rs.getString("history_code"),
                         rs.getInt("priority")));
     }
+
+    @Override
+    public List<String> findKnownAccountCodes() {
+        return jdbcTemplate.query("""
+                SELECT code
+                FROM accounting_accounts
+                ORDER BY LENGTH(code) DESC, code ASC
+                """, (rs, rowNum) -> rs.getString("code"));
+    }
 }

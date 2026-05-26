@@ -4,7 +4,6 @@ import com.walyson.pdfexcelai.model.ExtractedRow;
 import com.walyson.pdfexcelai.model.ExtractionResult;
 import com.walyson.pdfexcelai.model.PdfDocumentSnapshot;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,19 +16,22 @@ public class DocumentProcessingService {
     private final AiExtractionService aiExtractionService;
     private final ExcelExportService excelExportService;
     private final AccountingClassificationService accountingClassificationService;
+    private final CsvDecoderService csvDecoderService;
 
     public DocumentProcessingService(
             PdfTextExtractor pdfTextExtractor,
             BankStatementParserService bankStatementParserService,
             AiExtractionService aiExtractionService,
             ExcelExportService excelExportService,
-            AccountingClassificationService accountingClassificationService
+            AccountingClassificationService accountingClassificationService,
+            CsvDecoderService csvDecoderService
     ) {
         this.pdfTextExtractor = pdfTextExtractor;
         this.bankStatementParserService = bankStatementParserService;
         this.aiExtractionService = aiExtractionService;
         this.excelExportService = excelExportService;
         this.accountingClassificationService = accountingClassificationService;
+        this.csvDecoderService = csvDecoderService;
     }
 
     public ExtractionResult preview(MultipartFile file) throws IOException {
@@ -81,7 +83,7 @@ public class DocumentProcessingService {
     }
 
     private ExtractionResult previewFromCsv(MultipartFile file) throws IOException {
-        String csvContent = new String(file.getBytes(), StandardCharsets.UTF_8);
+        String csvContent = csvDecoderService.decode(file.getBytes());
         List<ExtractedRow> rows = bankStatementParserService.parseFromCsv(csvContent);
         rows = accountingClassificationService.classify(rows);
         
@@ -104,7 +106,7 @@ public class DocumentProcessingService {
         // Verificar se é CSV
         String filename = file.getOriginalFilename();
         if (filename != null && filename.toLowerCase().endsWith(".csv")) {
-            String csvContent = new String(file.getBytes(), StandardCharsets.UTF_8);
+            String csvContent = csvDecoderService.decode(file.getBytes());
             List<ExtractedRow> rows = bankStatementParserService.parseFromCsv(csvContent);
             rows = accountingClassificationService.classify(rows);
             return excelExportService.export(rows);

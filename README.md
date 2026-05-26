@@ -72,10 +72,17 @@ docker run -p 4200:80 pdf-excel-frontend
 
 ### Docker Compose
 ```bash
-docker compose up
+cp .env.local.example .env
+docker compose up -d postgres backend
 ```
 
-O compose sobe Postgres, backend e frontend. O Flyway roda na inicialização do backend e cria as tabelas/regras contábeis a partir das migrations em `src/main/resources/db/migration`.
+O compose sobe Postgres e backend. O Flyway roda na inicialização do backend e cria as tabelas/regras contábeis a partir das migrations em `src/main/resources/db/migration`.
+
+Para subir tambem o frontend pelo compose, mantenha o repositorio `pdf-excel-ai-frontend` ao lado deste projeto e use o profile:
+
+```bash
+docker compose --profile frontend up -d
+```
 
 Para subir apenas o banco local:
 
@@ -89,6 +96,35 @@ Configuração padrão do banco:
 DB_URL=jdbc:postgresql://localhost:5432/pdf_excel_ai
 DB_USERNAME=pdf_excel_ai
 DB_PASSWORD=pdf_excel_ai
+```
+
+### Variaveis para local e nuvem
+
+Use `.env.local.example` para rodar com Postgres local via Docker Compose. Use `.env.cloud.example` quando o banco for externo, como Supabase ou DigitalOcean Managed PostgreSQL. Localmente, o compose le `.env` automaticamente. Em nuvem, cadastre as mesmas chaves como environment variables da plataforma, sem commitar `.env`.
+
+Variaveis essenciais:
+
+```dotenv
+PORT=8081
+HOST_PORT=8081
+DB_URL=jdbc:postgresql://postgres:5432/pdf_excel_ai
+DB_USERNAME=pdf_excel_ai
+DB_PASSWORD=<senha-forte>
+AI_PROVIDER=github-models
+AI_API_URL=https://models.github.ai/inference/chat/completions
+AI_API_KEY=<token>
+AI_MODEL=openai/gpt-4.1-mini
+OCR_ENABLED=true
+APP_CORS_ALLOWED_ORIGINS=http://localhost:4200,https://seu-frontend.vercel.app
+```
+
+Em plataformas como DigitalOcean App Platform, Render ou Fly.io, a variavel `PORT` pode ser definida pela propria plataforma. Em Droplet com Docker Compose, `HOST_PORT` controla a porta publicada no servidor.
+
+Para rodar em um servidor com banco externo e sem subir o Postgres local:
+
+```bash
+cp .env.cloud.example .env
+docker compose -f docker-compose.cloud.yml up -d --build backend
 ```
 
 Em deploys como Render usando Supabase, `DB_URL` precisa ser uma URL JDBC completa. A tela do Supabase avisa que conexoes diretas usam IPv6 por padrao; como o Render pode ser IPv4-only, prefira o Session Pooler em `Connect > Pooler settings > Session pooler`.
