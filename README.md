@@ -229,6 +229,90 @@ Depois, publique a imagem Docker no Artifact Registry e atualize `container_imag
 
 Guia completo: `infra/gcp/README.md`.
 
+## 🔁 CI/CD com Docker Hub, SonarCloud, Snyk e Observabilidade
+
+Foram adicionados/atualizados os seguintes workflows:
+
+- `.github/workflows/ci.yml`
+	- testes Maven
+	- analise SonarCloud (quando `SONAR_TOKEN` estiver configurado)
+	- scan Snyk de dependencias e imagem Docker (quando `SNYK_TOKEN` estiver configurado)
+	- validacao do compose de observabilidade
+- `.github/workflows/dockerhub-image.yml`
+	- build e push da imagem para Docker Hub no branch `main`
+
+### Logins com GitHub nas plataformas
+
+1. Docker Hub
+	 - acesse: https://hub.docker.com/u/walysonscarazzati
+	 - faça login com GitHub
+	 - gere um Access Token em Account Settings > Security
+
+2. SonarCloud
+	 - acesse: https://sonarcloud.io/organizations/walyson-scarazzati/projects
+	 - faça login com GitHub
+	 - gere token em My Account > Security
+
+3. Snyk
+	 - acesse: https://app.snyk.io/org/walyson-scarazzati/projects
+	 - faça login com GitHub
+	 - gere token em Account Settings > API Token
+
+4. Grafana
+	 - acesse: https://walysonscarazzati.grafana.net/a/grafana-setupguide-app/home
+	 - faça login com GitHub
+	 - para envio remoto de metricas (opcional), gere credenciais em Grafana Cloud > Prometheus > Details
+
+### Secrets e Variables no GitHub
+
+Configure no repositorio (Settings > Secrets and variables > Actions):
+
+- Secrets:
+	- `DOCKERHUB_TOKEN`
+	- `SONAR_TOKEN`
+	- `SNYK_TOKEN`
+- Variables:
+	- `DOCKERHUB_USERNAME` (ex.: `walysonscarazzati`)
+	- `SONAR_PROJECT_KEY` (ex.: `walyson-scarazzati_pdf-excel-ai-backend`)
+	- `SONAR_ORGANIZATION` (ex.: `walyson-scarazzati`)
+
+Observacao: os jobs de SonarCloud e Snyk rodam apenas quando os tokens estiverem configurados.
+
+## 📈 Observabilidade gratuita: Prometheus + Grafana + Elasticsearch + Kibana
+
+Foi adicionado o arquivo `docker-compose.observability.yml` e configuracoes em `observability/`.
+
+### Subir stack local gratuita
+
+Com backend e banco:
+
+```bash
+docker compose \
+	-f docker-compose.yml \
+	-f docker-compose.observability.yml \
+	--profile observability up -d postgres backend prometheus grafana elasticsearch kibana elasticsearch-exporter
+```
+
+Endpoints:
+
+- Backend metrics: `http://localhost:8081/actuator/prometheus`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+- Elasticsearch: `http://localhost:9200`
+- Kibana: `http://localhost:5601`
+
+Credenciais padrao do Grafana local:
+
+- Usuario: `admin`
+- Senha: `admin123`
+
+Se quiser mudar, ajuste no ambiente:
+
+```dotenv
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=<senha-forte>
+```
+
 ## 🛠️ Configuração (Opcional)
 
 O sistema suporta integração com IA para extração mais avançada (opcional):

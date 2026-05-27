@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  backend:
+  backend-tests:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,3 +23,112 @@ jobs:
 
       - name: Test backend
         run: mvn -B test
+
+  sonarcloud:
+    runs-on: ubuntu-latest
+    needs: backend-tests
+
+    steps:
+      - name: Check Sonar token
+        id: gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping SonarCloud because SONAR_TOKEN is not configured"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: SonarCloud analysis
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY || 'walyson-scarazzati_pdf-excel-ai-backend' }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || 'walyson-scarazzati' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mvn -B -DskipTests verify sonar:sonar \
+            -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+            -Dsonar.organization="${SONAR_ORGANIZATION}" \
+            -Dsonar.host.url="https://sonarcloud.io" \
+            -Dsonar.token="${SONAR_TOKEN}"
+
+  snyk:
+    runs-on: ubuntu-latest
+    needs: backend-tests
+
+    steps:
+      - name: Check Snyk token
+        id: gate
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Snyk because SNYK_TOKEN is not configured"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Snyk dependency scan
+        if: steps.gate.outputs.enabled == 'true'
+        uses: snyk/actions/maven@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Build image for Snyk container scan
+        if: steps.gate.outputs.enabled == 'true'
+        run: docker build -t local/pdf-excel-ai:${{ github.sha }} .
+
+      - name: Snyk container scan
+        if: steps.gate.outputs.enabled == 'true'
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: local/pdf-excel-ai:${{ github.sha }}
+          args: --severity-threshold=high
+
+  observability-compose-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate compose files
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.observability.yml \
+            config > /tmp/compose.merged.yml
