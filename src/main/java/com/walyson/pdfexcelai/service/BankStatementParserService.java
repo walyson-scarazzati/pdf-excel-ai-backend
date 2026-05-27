@@ -227,11 +227,20 @@ public class BankStatementParserService {
                 continue;
             }
 
-            String complement = String.join(" ", List.of(branchOrLot, description)).trim().replaceAll("\\s{2,}", " ");
+            String complement = buildBancoDoBrasilColumnComplement(branchOrLot, description);
             boolean credit = normalizedDirection.equals("C");
             rows.add(createRow(date, normalizedAmount, credit, normalizeHistoryCode(historyCode), complement));
         }
         return deduplicate(rows);
+    }
+
+    private String buildBancoDoBrasilColumnComplement(String branchOrLot, String description) {
+        String cleanedDescription = sanitizeComplement(description);
+        String cleanedBranchOrLot = clean(branchOrLot);
+        if (!StringUtils.hasText(cleanedBranchOrLot) || isNumericReferenceToken(cleanedBranchOrLot)) {
+            return cleanedDescription;
+        }
+        return sanitizeComplement(cleanedBranchOrLot + " " + cleanedDescription);
     }
 
     private String normalizeDirection(String value) {
@@ -530,7 +539,38 @@ public class BankStatementParserService {
                 .replaceAll("\\s{2,}", " ")
                 .replace('|', ' ')
                 .trim();
+        return sanitizeComplement(cleaned);
+    }
+
+    private String sanitizeComplement(String value) {
+        String cleaned = clean(value).replaceAll("\\s{2,}", " ");
+        if (!StringUtils.hasText(cleaned)) {
+            return "";
+        }
+
+        String[] tokens = cleaned.split("\\s+");
+        int index = 0;
+        int numericPrefixCount = 0;
+        while (index < tokens.length && isNumericReferenceToken(tokens[index])) {
+            numericPrefixCount++;
+            index++;
+        }
+
+        if (numericPrefixCount >= 1 && index < tokens.length) {
+            return String.join(" ", java.util.Arrays.copyOfRange(tokens, index, tokens.length)).trim();
+        }
         return cleaned;
+    }
+
+    private boolean isNumericReferenceToken(String token) {
+        String compact = clean(token).replaceAll("[^0-9A-Za-z]", "");
+        if (!StringUtils.hasText(compact)) {
+            return true;
+        }
+        if (compact.matches("\\d{2,}")) {
+            return true;
+        }
+        return compact.matches("[A-Za-z]?\\d{3,}|\\d{3,}[A-Za-z]?");
     }
 
     private ExtractedRow createRow(String date, String amount, boolean credit, String historyCode, String complement) {
@@ -687,6 +727,9 @@ public class BankStatementParserService {
         boolean currentStartedWithDate = false;
 
         for (String rawLine : text.split("\\R")) {
+            if (rawLine != null && rawLine.trim().startsWith("COL|")) {
+                continue;
+            }
             String line = normalizeBankLine(rawLine);
             if (!StringUtils.hasText(line)) {
                 continue;
