@@ -178,10 +178,6 @@ public class BankStatementParserService {
 
     private List<ExtractedRow> parseBancoDoBrasil(String text) {
         List<ExtractedRow> columnRows = parseBancoDoBrasilColumns(text);
-        if (!columnRows.isEmpty()) {
-            return columnRows;
-        }
-
         String statementMonthYear = inferStatementMonthYear(text);
         List<ExtractedRow> rows = new ArrayList<>();
         for (String line : buildBancoDoBrasilBlocks(text)) {
@@ -200,7 +196,9 @@ public class BankStatementParserService {
             boolean credit = isCreditLine(line, amount);
             rows.add(createRow(date, amount, credit, historyCode, complement));
         }
-        return deduplicate(rows);
+
+        List<ExtractedRow> blockRows = deduplicate(rows);
+        return pickMostReliableRows(columnRows, blockRows);
     }
 
     private List<ExtractedRow> parseBancoDoBrasilColumns(String text) {
@@ -221,15 +219,90 @@ public class BankStatementParserService {
 
             String date = resolveDate(normalizeBankColumnDate(dateToken), statementMonthYear);
             String normalizedAmount = normalizeColumnAmount(amount);
-            if (!StringUtils.hasText(date) || !StringUtils.hasText(normalizedAmount) || !StringUtils.hasText(description)) {
+            String normalizedDirection = normalizeDirection(dc);
+            if (!StringUtils.hasText(date)
+                    || !StringUtils.hasText(normalizedAmount)
+                    || !StringUtils.hasText(description)
+                    || !StringUtils.hasText(normalizedDirection)) {
                 continue;
             }
 
             String complement = String.join(" ", List.of(branchOrLot, description)).trim().replaceAll("\\s{2,}", " ");
-            boolean credit = dc.equalsIgnoreCase("C") || isCreditLine(description + " " + dc, normalizedAmount);
+            boolean credit = normalizedDirection.equals("C");
             rows.add(createRow(date, normalizedAmount, credit, normalizeHistoryCode(historyCode), complement));
         }
         return deduplicate(rows);
+    }
+
+    private String normalizeDirection(String value) {
+        String normalized = clean(value).toUpperCase(Locale.ROOT).replaceAll("[^CD]", "");
+        if (normalized.contains("C")) {
+            return "C";
+        }
+        if (normalized.contains("D")) {
+            return "D";
+        }
+        return "";
+    }
+
+    private List<ExtractedRow> pickMostReliableRows(List<ExtractedRow> columnRows, List<ExtractedRow> blockRows) {
+        if (columnRows.isEmpty()) {
+            return blockRows;
+        }
+        if (blockRows.isEmpty()) {
+            return columnRows;
+        }
+
+        int columnScore = scoreRows(columnRows);
+        int blockScore = scoreRows(blockRows);
+        return columnScore > blockScore ? columnRows : blockRows;
+    }
+
+    private int scoreRows(List<ExtractedRow> rows) {
+        int score = 0;
+        for (ExtractedRow row : rows) {
+            score += scoreRow(row);
+        }
+        return score;
+    }
+
+    private int scoreRow(ExtractedRow row) {
+        int score = 0;
+
+        if (row.date().matches("\\d{2}/\\d{2}/\\d{4}")) {
+            score += 3;
+        }
+        if (row.value().matches("\\d{1,3}(?:\\.\\d{3})*,\\d{2}|\\d+,\\d{2}")) {
+            score += 3;
+        }
+
+        boolean hasDebit = StringUtils.hasText(row.debit());
+        boolean hasCredit = StringUtils.hasText(row.credit());
+        if (hasDebit ^ hasCredit) {
+            score += 2;
+        }
+
+        if (StringUtils.hasText(row.historyCode())) {
+            score += 1;
+        }
+
+        if (StringUtils.hasText(row.complement())) {
+            String normalized = normalize(row.complement());
+            if (normalized.matches(".*[a-z].*")) {
+                score += 2;
+            }
+            if (normalized.length() > 12) {
+                int digits = row.complement().replaceAll("[^0-9]", "").length();
+                if ((double) digits / normalized.length() > 0.45d) {
+                    score -= 2;
+                }
+            }
+            if (containsAny(normalized, "saldo anterior", "saldo final", "saldo ", "limite especial")) {
+                score -= 2;
+            }
+        }
+
+        return score;
     }
 
     private List<ExtractedRow> parseSantander(String text) {
