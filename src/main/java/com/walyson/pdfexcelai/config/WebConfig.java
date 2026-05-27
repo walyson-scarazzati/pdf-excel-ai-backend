@@ -16,6 +16,10 @@ public class WebConfig implements WebMvcConfigurer {
             "https://pdf-excel-ai-frontend.vercel.app"
     );
 
+    private static final Set<String> DEFAULT_ALLOWED_ORIGIN_PATTERNS = Set.of(
+            "https://*.run.app"
+    );
+
     private final CorsProperties corsProperties;
 
     public WebConfig(CorsProperties corsProperties) {
@@ -29,8 +33,14 @@ public class WebConfig implements WebMvcConfigurer {
             allowedOrigins.addAll(corsProperties.allowedOrigins());
         }
 
+        LinkedHashSet<String> allowedOriginPatterns = new LinkedHashSet<>(DEFAULT_ALLOWED_ORIGIN_PATTERNS);
+        if (corsProperties.allowedOriginPatterns() != null) {
+            allowedOriginPatterns.addAll(corsProperties.allowedOriginPatterns());
+        }
+
         registry.addMapping("/**")
                 .allowedOrigins(allowedOrigins.toArray(String[]::new))
+                .allowedOriginPatterns(allowedOriginPatterns.toArray(String[]::new))
                 .allowedMethods("GET", "POST", "OPTIONS")
                 .allowedHeaders("*")
                 .maxAge(3600);
