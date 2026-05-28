@@ -21,8 +21,15 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Test backend
-        run: mvn -B test
+      - name: Test backend with coverage
+        run: mvn -B verify -DskipITs
+
+      - name: Upload JaCoCo coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/jacoco.xml
+          retention-days: 1
 
   sonarcloud:
     runs-on: ubuntu-latest
@@ -55,6 +62,13 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Download JaCoCo coverage report
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco
+
       - name: SonarCloud analysis
         if: steps.gate.outputs.enabled == 'true'
         env:
@@ -63,11 +77,12 @@ jobs:
           SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || 'walyson-scarazzati' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mvn -B -DskipTests verify sonar:sonar \
+          mvn -B -DskipTests sonar:sonar \
             -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
             -Dsonar.organization="${SONAR_ORGANIZATION}" \
             -Dsonar.host.url="https://sonarcloud.io" \
-            -Dsonar.token="${SONAR_TOKEN}"
+            -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
   snyk:
     runs-on: ubuntu-latest
